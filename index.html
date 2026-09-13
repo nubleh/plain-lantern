@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<meta name="indie-build-id" content="af6c4a16">
+<title>Archive</title>
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#2b0a08">
+<link rel="apple-touch-icon" href="./icon.png">
+<style id="_shellStyle">
+:root{--bg:#f4f2ee;--cd:#ffffff;--i:#1a1a1e;--d:#6b6b70;--br:#ddd8d0;--go:#a8201a;}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0;}
+html,body{height:100%;}
+body{background:var(--bg);color:var(--i);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:16px;line-height:1.5;}
+#_g{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100dvh;padding:32px 24px;}
+._gi{font-size:2.2rem;margin-bottom:14px;opacity:.7;}
+._gt{font-size:1.7rem;letter-spacing:.02em;margin-bottom:4px;}
+._gs{font-style:italic;color:var(--d);font-size:.86rem;margin-bottom:26px;}
+#_g form{width:100%;max-width:300px;display:flex;flex-direction:column;gap:10px;}
+#_g input[type=text]{border:2px solid var(--br);border-radius:6px;padding:13px 14px;font-size:1rem;font-family:inherit;background:var(--cd);color:var(--i);outline:none;-webkit-appearance:none;width:100%;}
+#_g input[type=text]:focus{border-color:var(--go);}
+#_g button[type=submit]{background:var(--i);color:var(--bg);border:none;border-radius:6px;padding:13px;font-size:1rem;font-family:inherit;cursor:pointer;letter-spacing:.04em;width:100%;}
+#_g button[type=submit]:active{opacity:.8;}
+#_gm{font-size:.84rem;min-height:1.3em;margin-top:6px;text-align:center;}
+#_gm.e{color:#a8201a;}
+#_gm.w{color:var(--go);font-style:italic;}
+#_ref{background:none;border:1px solid var(--br);border-radius:4px;font-family:inherit;font-size:.72rem;letter-spacing:.05em;text-transform:uppercase;color:var(--d);cursor:pointer;padding:7px 14px;margin-top:6px;opacity:.65;}
+#_ref:active{opacity:.4;}
+</style>
+</head>
+<body>
+<div id="_g">
+  <div class="_gi">&#x1F512;</div>
+  <h1 class="_gt">Archive</h1>
+  <p class="_gs">Private collection</p>
+  <form id="_gf" autocomplete="off">
+    <input type="text" id="_pw" placeholder="Passphrase" autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" style="-webkit-text-security:disc">
+    <button type="submit">Unlock</button>
+  </form>
+  <div id="_gm"></div>
+  <button id="_ref" type="button">&#x21BB; Force refresh</button>
+</div>
+<script>if('serviceWorker'in navigator){navigator.serviceWorker.register('./sw.js');}</script>
+<script>
+(function(){
+  var SALT_B64='4TC2go2iy9cOXd26H19TsA==';
+  var IT=100000;
+  var SK='_ilp';
+  var gm=document.getElementById('_gm');
+  var ICONS={"check_circle":"<svg viewBox=\"0 -960 960 960\" fill=\"currentColor\"><path d=\"m424-296 282-282-56-56-226 226-114-114-56 56 170 170Zm56 216q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm0-80q134 0 227-93t93-227q0-134-93-227t-227-93q-134 0-227 93t-93 227q0 134 93 227t227 93Zm0-320Z\"/></svg>","error":"<svg viewBox=\"0 -960 960 960\" fill=\"currentColor\"><path d=\"M480-280q17 0 28.5-11.5T520-320q0-17-11.5-28.5T480-360q-17 0-28.5 11.5T440-320q0 17 11.5 28.5T480-280Zm-40-160h80v-240h-80v240Zm40 360q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm0-80q134 0 227-93t93-227q0-134-93-227t-227-93q-134 0-227 93t-93 227q0 134 93 227t227 93Zm0-320Z\"/></svg>"};
+
+  function b2b(b){return Uint8Array.from(atob(b),function(c){return c.charCodeAt(0);});}
+
+  function dk(p,s){
+    return crypto.subtle.importKey('raw',new TextEncoder().encode(p),'PBKDF2',false,['deriveKey'])
+      .then(function(km){
+        return crypto.subtle.deriveKey(
+          {name:'PBKDF2',salt:s,iterations:IT,hash:'SHA-256'},
+          km,{name:'AES-GCM',length:256},false,['decrypt']
+        );
+      });
+  }
+
+  // Decompresses via the native Streams API (Chrome 80+/Firefox 113+/Safari 16.4+ — safe to rely
+  // on for a personal-use PWA) — no gzip library needed client-side, matching this build's own
+  // gzip-before-encrypt scheme (see file header).
+  function gunzip(bytes){
+    var stream=new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+    return new Response(stream).arrayBuffer().then(function(buf){return new TextDecoder().decode(buf);});
+  }
+
+  function decModule(buf,k){
+    var bytes=new Uint8Array(buf),iv=bytes.slice(0,12),data=bytes.slice(12);
+    return crypto.subtle.decrypt({name:'AES-GCM',iv:iv},k,data).then(function(gz){return gunzip(new Uint8Array(gz));});
+  }
+  function decModuleWithRetry(buf,k,attemptsLeft){
+    if(attemptsLeft===undefined)attemptsLeft=3;
+    return decModule(buf,k).catch(function(err){
+      if(attemptsLeft>1)return decModuleWithRetry(buf,k,attemptsLeft-1);
+      throw err;
+    });
+  }
+
+  function launch(html){
+    var shellStyle=document.getElementById('_shellStyle');
+    if(shellStyle)shellStyle.parentNode.removeChild(shellStyle);
+    var inner=new DOMParser().parseFromString(html,'text/html');
+    document.title=inner.title;
+    inner.querySelectorAll('style').forEach(function(s){document.head.appendChild(document.importNode(s,true));});
+    var scripts=[];
+    inner.querySelectorAll('script').forEach(function(s){scripts.push(s.textContent);s.parentNode.removeChild(s);});
+    document.body.className=inner.body.className;
+    document.body.innerHTML=inner.body.innerHTML;
+    scripts.forEach(function(code){var s=document.createElement('script');s.textContent=code;document.body.appendChild(s);});
+  }
+
+  function cacheHas(url){
+    return caches.open('indie-catalog-modules').then(function(c){return c.match(url);}).then(function(m){return !!m;});
+  }
+  function readModuleBuffer(file){
+    return caches.open('indie-catalog-modules').then(function(c){return c.match(file);}).then(function(r){
+      if(!r)throw new Error('cache entry missing: '+file);
+      return r.arrayBuffer();
+    });
+  }
+  function downloadWithRetry(url,attemptsLeft){
+    if(attemptsLeft===undefined)attemptsLeft=3;
+    return fetch(url).then(function(resp){
+      if(!resp.ok)throw new Error('HTTP '+resp.status);
+      return resp.arrayBuffer();
+    }).catch(function(err){
+      if(attemptsLeft>1)return downloadWithRetry(url,attemptsLeft-1);
+      throw err;
+    });
+  }
+  // Fetches (cache-first) + caches a module's raw encrypted bytes. Never decrypts — caller does
+  // that separately, so a download success can be cached even if decryption fails downstream.
+  function resolveRaw(file){
+    return cacheHas(file).then(function(has){
+      if(has)return readModuleBuffer(file);
+      return downloadWithRetry(file).then(function(buf){
+        return caches.open('indie-catalog-modules').then(function(c){return c.put(file,new Response(buf));}).then(function(){return buf;});
+      });
+    });
+  }
+  function runPool(items,limit,worker){
+    return new Promise(function(resolve){
+      var idx=0,active=0,total=items.length;
+      if(total===0){resolve();return;}
+      function next(){
+        if(idx>=total){if(active===0)resolve();return;}
+        var item=items[idx++];active++;
+        worker(item).then(function(){active--;next();},function(){active--;next();});
+      }
+      for(var i=0;i<Math.min(limit,total);i++)next();
+    });
+  }
+
+  var UNLOCK_IN_FLIGHT=false;
+  function beginUnlockAttempt(msg){
+    if(UNLOCK_IN_FLIGHT)return false;
+    UNLOCK_IN_FLIGHT=true;
+    document.getElementById('_gf').style.display='none';
+    gm.textContent=msg;gm.className='w';
+    return true;
+  }
+  function endUnlockAttempt(showForm){
+    UNLOCK_IN_FLIGHT=false;
+    if(showForm)document.getElementById('_gf').style.display='';
+  }
+  function hardFailWrongPassphrase(){
+    endUnlockAttempt(true);
+    localStorage.removeItem(SK);
+    gm.textContent='Wrong passphrase — try again.';gm.className='e';
+  }
+
+  // ── Small floating progress pill ────────────────────────────────────────
+  // Shared by the progressive loader (beginBackgroundLoad, below — every
+  // visit that didn't fully hit the fast path) and backgroundCheckForUpdate
+  // (a fast-path launch finding newer data on the server) — same look
+  // either way, so "the catalog is quietly pulling in fresh data" always
+  // reads the same regardless of which path triggered it. Hardcoded literal
+  // colors matching this deploy's own palette (report.html's --text/--bg/
+  // --green/--accent), not CSS vars — this can be created either right
+  // after launch() (report.html's own <style> is live by then) or well
+  // into a long session, and shouldn't depend on report.html's own theme
+  // tokens never changing shape.
+  var MINI_PANEL=null;
+  var BG_PIECES=[]; // [{kind, file, state:'pending'|'done'|'error'}, ...] — whatever's in flight right now
+  function initMiniPanel(total){
+    var style=document.createElement('style');
+    style.textContent='#_prog{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:99999;'
+      +'background:#1a1a1e;color:#f4f2ee;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:.8rem;'
+      +'padding:8px 14px;border-radius:20px;display:flex;align-items:center;gap:8px;'
+      +'box-shadow:0 4px 18px rgba(0,0,0,.35);transition:opacity .6s ease,transform .6s ease;}'
+      +'#_prog.done{background:#1a7f37;}#_prog.err{background:#a8201a;}'
+      +'#_prog.fade{opacity:0;transform:translateX(-50%) translateY(8px);}'
+      +'#_progbar{width:60px;height:4px;background:rgba(255,255,255,.25);border-radius:2px;overflow:hidden;flex-shrink:0;}'
+      +'#_progbarfill{display:block;height:100%;width:0%;background:#f4f2ee;transition:width .2s ease;}';
+    document.head.appendChild(style);
+    var panel=document.createElement('div');panel.id='_prog';
+    panel.innerHTML='<span id="_progtext">Loading catalog… 0/'+total+'</span>'
+      +'<span id="_progbar"><span id="_progbarfill"></span></span>';
+    document.body.appendChild(panel);
+    MINI_PANEL={el:panel,textEl:panel.querySelector('#_progtext'),barFillEl:panel.querySelector('#_progbarfill')};
+  }
+  function updateMiniPanelProgress(){
+    if(!MINI_PANEL)return;
+    var total=BG_PIECES.length;
+    var done=BG_PIECES.filter(function(p){return p.state==='done'||p.state==='error';}).length;
+    MINI_PANEL.textEl.textContent='Loading catalog… '+done+'/'+total;
+    MINI_PANEL.barFillEl.style.width=(total>0?Math.round(done/total*100):100)+'%';
+  }
+  function finishMiniPanel(){
+    if(!MINI_PANEL)return;
+    var failed=BG_PIECES.filter(function(p){return p.state==='error';}).length;
+    MINI_PANEL.el.className=failed?'err':'done';
+    MINI_PANEL.textEl.textContent=failed?(failed+' item(s) failed to load'):'Catalog up to date';
+    MINI_PANEL.barFillEl.parentNode.style.display='none';
+    var panel=MINI_PANEL.el;
+    setTimeout(function(){
+      panel.className+=' fade';
+      setTimeout(function(){
+        if(panel.parentNode)panel.parentNode.removeChild(panel);
+        if(MINI_PANEL&&MINI_PANEL.el===panel)MINI_PANEL=null;
+      },700);
+    },failed?3000:1200);
+  }
+
+  // ── Progressive background loading ──────────────────────────────────────
+  // Used whenever the fast path (below) can't run — first-ever visit,
+  // cleared cache, or a build with new shops not yet downloaded. The shell
+  // launches the MOMENT its own (small) bytes decrypt — report.html already
+  // treats an undefined ALL_SHOPS/CRAWL_LOG/STORE_HISTORY as "empty," via its
+  // own `typeof X!=='undefined'` guards, so no data-stub patch is needed
+  // here (unlike deploy-catalog.js's report.html, which needed
+  // ensureDataStubs() for the same purpose). Every data module and shop
+  // fragment then streams in fully in the background — each one calling
+  // window.__indieCatalogLive (already exists for exactly this purpose, see
+  // backgroundCheckForUpdate below) the instant it lands, so the grid fills
+  // in live with no reload and no lost scroll/filter state. Progress shows
+  // through the small floating pill above, never blocking the
+  // already-visible catalog.
+  function beginBackgroundLoad(manifest,key){
+    var pieces=[{kind:'crawlLog',file:manifest.crawlLog.file},{kind:'storeHistory',file:manifest.storeHistory.file}].concat(
+      manifest.shopFragments.map(function(f){return {kind:'shop',file:f.file};})
+    );
+    BG_PIECES=pieces.map(function(p){return {kind:p.kind,file:p.file,state:'pending'};});
+    initMiniPanel(BG_PIECES.length);
+    runPool(BG_PIECES,4,function(piece){
+      return resolveRaw(piece.file).then(function(buf){
+        return decModuleWithRetry(buf,key);
+      }).then(function(html){
+        var live=window.__indieCatalogLive;
+        if(live){
+          if(piece.kind==='crawlLog'){
+            var cl=extractVarFromModuleHtml(html,'CRAWL_LOG');
+            if(cl!==undefined)live.setCrawlLog(cl);
+          }else if(piece.kind==='storeHistory'){
+            var sh=extractVarFromModuleHtml(html,'STORE_HISTORY');
+            if(sh!==undefined)live.setStoreHistory(sh);
+          }else{
+            var shop=extractShopFromFragmentHtml(html);
+            if(shop)live.upsertShop(shop);
+          }
+        }
+        piece.state='done';
+      }).catch(function(err){
+        piece.state='error';
+        console.log('piece failed to load (non-fatal, skipped):',piece.file,err);
+      }).then(updateMiniPanelProgress);
+    }).then(finishMiniPanel);
+  }
+
+  function startBackgroundLoad(p){
+    var key;
+    return dk(p,b2b(SALT_B64)).then(function(k){
+      key=k;
+      return fetch('build-manifest.json',{cache:'no-store'}).then(function(r){
+        if(!r.ok)throw new Error('manifest http '+r.status);
+        return r.json();
+      });
+    }).then(function(manifest){
+      return resolveRaw(manifest.shell.file).then(function(buf){
+        return decModuleWithRetry(buf,key).catch(function(){throw {code:'wrong-passphrase'};});
+      }).then(function(shellHtml){
+        localStorage.setItem(SK,p);
+        launch(shellHtml); // catalog visible NOW, data streams in behind it
+        beginBackgroundLoad(manifest,key); // fire-and-forget from here
+      });
+    });
+  }
+
+  // ── Fast-path launch ─────────────────────────────────────────────────────
+  // Skips the network + progressive loader entirely when everything critical
+  // is ALREADY fully cached from a previous visit — cache reads + local
+  // decrypt only, no round-trip, so a returning visitor goes straight to a
+  // fully-populated catalog instead of waiting on the "Unlocking…" screen
+  // for data they already have. Falls through to startBackgroundLoad() for
+  // any cold/incomplete-cache case (first visit, cleared cache, or new shop
+  // data not yet downloaded) — purely additive, same launch order (crawlLog,
+  // storeHistory, shop fragments, shell last) the old blocking flow always
+  // used, just skipping the network fetch when nothing needs it.
+  function readManifestFromCache(){
+    // No network call — reads whatever build-manifest.json the SW's own
+    // network-first fetch handler last successfully cached.
+    return caches.match('build-manifest.json').then(function(r){return r?r.json():null;}).catch(function(){return null;});
+  }
+  function manifestFileList(manifest){
+    return [manifest.shell.file,manifest.crawlLog.file,manifest.storeHistory.file].concat(manifest.shopFragments.map(function(f){return f.file;}));
+  }
+  function checkAllCriticalCached(manifest){
+    return Promise.all(manifestFileList(manifest).map(cacheHas)).then(function(rs){return rs.every(Boolean);});
+  }
+  // Rejects with a tagged {code} error: 'no-fast-path' (nothing cached, or
+  // not everything critical present — no side effects, safe to fall
+  // through) / 'cache-read-error' (a cache entry vanished/corrupted after
+  // checkAllCriticalCached said it was there — safe to fall through, the
+  // slow path will re-download and self-heal) / 'wrong-passphrase' (every
+  // buffer read fine, but decryption failed). Reads everything, THEN
+  // decrypts everything, THEN launches everything — never launches
+  // partway through, so a mid-flight failure never leaves a half-replaced
+  // page with no working fallback.
+  function fastPathLaunch(p){
+    var manifest,key;
+    return readManifestFromCache().then(function(m){
+      manifest=m;
+      if(!manifest)throw {code:'no-fast-path'};
+      return checkAllCriticalCached(manifest);
+    }).then(function(allCached){
+      if(!allCached)throw {code:'no-fast-path'};
+      return dk(p,b2b(SALT_B64));
+    }).then(function(k){
+      key=k;
+      return Promise.all(manifestFileList(manifest).map(function(f){
+        return readModuleBuffer(f).catch(function(){throw {code:'cache-read-error'};});
+      }));
+    }).then(function(bufs){
+      return Promise.all(bufs.map(function(buf){
+        return decModuleWithRetry(buf,key).catch(function(){throw {code:'wrong-passphrase'};});
+      }));
+    }).then(function(htmls){
+      // Every buffer decrypted successfully with this passphrase — proven
+      // correct, same as the progressive path's own shell-decrypt gate.
+      localStorage.setItem(SK,p);
+      var shellHtml=htmls[0],crawlLogHtml=htmls[1],storeHistoryHtml=htmls[2],shopHtmls=htmls.slice(3);
+      launch(crawlLogHtml);
+      launch(storeHistoryHtml);
+      if(shopHtmls.length)launch(shopHtmls.join('\n'));
+      launch(shellHtml);
+      return {manifest:manifest,key:key};
+    });
+  }
+
+  function attemptUnlock(p,isAutoResume){
+    if(!beginUnlockAttempt(isAutoResume?'Unlocking…':'Unlocking… (first time takes a moment)'))return;
+    fastPathLaunch(p).then(function(res){
+      // #_gf is gone along with the rest of the lock-screen DOM (launch()
+      // replaced document.body.innerHTML) — no need to reset UNLOCK_IN_FLIGHT.
+      backgroundCheckForUpdate(res.manifest,res.key);
+    }).catch(function(err){
+      if(err&&err.code==='wrong-passphrase'){hardFailWrongPassphrase();return;}
+      // no-fast-path / cache-read-error / anything unexpected — fall through
+      // to the progressive loader, which handles a cold/incomplete cache
+      // safely and transparently on its own.
+      startBackgroundLoad(p).catch(function(err2){
+        if(err2&&err2.code==='wrong-passphrase'){hardFailWrongPassphrase();return;}
+        // A manifest/network problem, not a wrong passphrase (that's already
+        // handled above) — leave the stored passphrase alone, just let the
+        // user retry manually.
+        endUnlockAttempt(true);
+        gm.textContent=isAutoResume?'':'Couldn\'t unlock — check your connection and try again.';
+        gm.className=isAutoResume?'':'e';
+        console.log('unlock failed:',err2);
+      });
+    });
+  }
+
+  // Safely pulls one plain value out of a decrypted module's script text without ever touching
+  // this page's own real globals — runs the code inside a fresh Function scope (a var declared
+  // inside a Function body is local to that call, never leaks to window) and hands back whatever
+  // ended up bound to varName there. Used for the crawlLog/storeHistory modules, which are each
+  // just 'var CRAWL_LOG={...};' / 'var STORE_HISTORY={...};' (plus a harmless no-op
+  // 'if(typeof module...)' line — module is genuinely undefined here, so that branch never runs).
+  // Deliberately plain string ops here (indexOf/slice), never a regex literal with backslash
+  // escapes and never the literal opening/closing script-tag text spelled out — this function's
+  // own source lives inside buildShell()'s giant outer template literal, which (a) silently drops
+  // the backslash from any escape sequence it doesn't itself recognize before this code is ever
+  // written to disk (the same class of bug this file's CLAUDE.md documents for a literal newline
+  // escape, just not limited to that one case — confirmed hitting it for real while writing this
+  // very function, caught only by extracting the actual generated inline script from a real build
+  // and syntax-checking THAT, exactly as that write-up prescribes), and (b) would let the closing
+  // half of a script-tag pair, if spelled out literally in a comment or string here, prematurely
+  // end the real script element this code ends up embedded in once deployed. Plain string
+  // concatenation avoids both traps at once — nothing here for either kind of stripping to bite.
+  function stripScriptTag(html){
+    // The closing half is built from two pieces at runtime, never written as one literal string
+    // here — HTML's tokenizer looks for that exact byte sequence ANYWHERE inside a live <script>
+    // element (it doesn't parse JS at all, so a plain string literal containing it is just as
+    // dangerous as writing the real tag), and this very function's own source ends up embedded
+    // inside one once deployed.
+    var closeTag='</scr'+'ipt>';
+    var open=html.indexOf('<script>'),close=html.lastIndexOf(closeTag);
+    return (open!==-1&&close!==-1)?html.slice(open+8,close):html;
+  }
+  function extractVarFromModuleHtml(html,varName){
+    var code=stripScriptTag(html);
+    try{return (new Function(code+';return (typeof '+varName+"!=='undefined')?"+varName+':undefined;'))();}
+    catch(e){console.log('extractVarFromModuleHtml failed for',varName,e);return undefined;}
+  }
+  // A shop fragment's script is '[var ALL_SHOPS=[];]ALL_SHOPS.push({...one shop's full data...});'
+  // — fragment 0 carries the array-declaration prefix, every other fragment is just the push()
+  // call. Strip that one prefix (a real ALL_SHOPS never needs to exist for this — we only want
+  // whatever gets pushed) and hand ALL_SHOPS in as a fake array whose push() just captures its
+  // argument, so this works identically regardless of which fragment index actually changed.
+  function extractShopFromFragmentHtml(html){
+    var code=stripScriptTag(html).replace('var ALL_SHOPS=[];','');
+    var captured=null;
+    try{(new Function('ALL_SHOPS',code))({push:function(x){captured=x;}});}
+    catch(e){console.log('extractShopFromFragmentHtml failed',e);}
+    return captured;
+  }
+
+  // Best-effort silent check for a newer deploy, run once right after a successful unlock. For
+  // crawlLog/storeHistory/shop-fragment changes, this doesn't just re-prime the module cache for
+  // NEXT visit (as it used to) — it decrypts the changed piece right now and feeds the result
+  // straight into window.__indieCatalogLive (see report.html), so the ALREADY-OPEN page's grid,
+  // sort order, and stock-history icons update in place with no reload. A SHELL change is the one
+  // exception: the currently-running JS can't be hot-swapped mid-session, so that piece is still
+  // only re-cached silently, same as before — it takes effect on the next real page load. No
+  // banner/reload prompt for anything (unlike deploy-catalog.js) — this catalog refreshes often
+  // enough that a same-session prompt would be more noise than signal for how small the data is.
+  function backgroundCheckForUpdate(oldManifest,key){
+    fetch('build-manifest.json',{cache:'no-store'}).then(function(r){
+      if(!r.ok)throw new Error('manifest http '+r.status);
+      return r.json();
+    }).then(function(newManifest){
+      if(newManifest.buildId===oldManifest.buildId)return;
+      var changed=[];
+      if(oldManifest.shell.file!==newManifest.shell.file)changed.push({kind:'shell',file:newManifest.shell.file});
+      if(oldManifest.crawlLog.file!==newManifest.crawlLog.file)changed.push({kind:'crawlLog',file:newManifest.crawlLog.file});
+      if(oldManifest.storeHistory.file!==newManifest.storeHistory.file)changed.push({kind:'storeHistory',file:newManifest.storeHistory.file});
+      newManifest.shopFragments.forEach(function(f,i){
+        var old=oldManifest.shopFragments[i];
+        if(!old||old.file!==f.file)changed.push({kind:'shop',file:f.file});
+      });
+      changed.forEach(function(entry){
+        resolveRaw(entry.file).then(function(buf){
+          if(entry.kind==='shell')return; // re-cached only — see comment above
+          return decModuleWithRetry(buf,key).then(function(html){
+            var live=window.__indieCatalogLive;
+            if(!live)return;
+            if(entry.kind==='crawlLog'){
+              var cl=extractVarFromModuleHtml(html,'CRAWL_LOG');
+              if(cl!==undefined)live.setCrawlLog(cl);
+            }else if(entry.kind==='storeHistory'){
+              var sh=extractVarFromModuleHtml(html,'STORE_HISTORY');
+              if(sh!==undefined)live.setStoreHistory(sh);
+            }else if(entry.kind==='shop'){
+              var shop=extractShopFromFragmentHtml(html);
+              if(shop)live.upsertShop(shop);
+            }
+          });
+        }).catch(function(err){console.log('background update: piece failed (ignored, re-cache or live-apply):',entry.file,err);});
+      });
+    }).catch(function(err){console.log('background update check failed (ignored):',err);});
+  }
+
+  var sv=localStorage.getItem(SK);
+  if(sv)attemptUnlock(sv,true);
+
+  document.getElementById('_gf').addEventListener('submit',function(e){
+    e.preventDefault();
+    var p=document.getElementById('_pw').value;
+    if(!p)return;
+    attemptUnlock(p,false);
+  });
+}());
+</script>
+<script>
+(function(){
+  var ref=document.getElementById('_ref');
+  ref.addEventListener('click',function(){
+    var btn=this;btn.textContent='Clearing…';btn.disabled=true;
+    Promise.all([
+      navigator.serviceWorker?navigator.serviceWorker.getRegistrations().then(function(rs){return Promise.all(rs.map(function(r){return r.unregister();}));}):Promise.resolve(),
+      window.caches?caches.keys().then(function(ks){return Promise.all(ks.map(function(k){return caches.delete(k);}));}):Promise.resolve()
+    ]).then(function(){location.reload(true);});
+  });
+}());
+</script>
+</body>
+</html>
